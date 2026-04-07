@@ -1,0 +1,12 @@
+---
+- name: Set hostname for master node
+  ansible.builtin.hostname:
+    name: "control-{{ groups['kube_masters'].index(inventory_hostname) + 1 }}"
+  become: true
+  when: inventory_hostname in groups['kube_masters']
+
+- name: Set hostname for worker nodes
+  ansible.builtin.hostname:
+    name: "worker-{{ groups['kube_workers'].index(inventory_hostname) + 1 }}"
+  become: true
+  when: inventory_hostname in groups['kube_workers']

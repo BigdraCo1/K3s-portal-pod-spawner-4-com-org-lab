@@ -1,0 +1,69 @@
+---
+- name: Kube
+  hosts: kube_cluster
+  become: true
+
+  tasks:
+    - name: Ping my hosts
+      ansible.builtin.ping:
+
+  roles:
+    - kube_cluster
+    - kube_master
+    - kube_worker
+
+- name: Verify Kubernetes Cluster
+  hosts: kube_masters
+  become: true
+
+  tasks:
+    - name: Get all nodes
+      ansible.builtin.command: kubectl get nodes --no-headers
+      register: nodes_output
+      changed_when: false
+
+    - name: Count total nodes
+      ansible.builtin.set_fact:
+        total_nodes: "{{ nodes_output.stdout_lines | length }}"
+        expected_nodes: "{{ groups['kube_masters'] | length + groups['kube_workers'] | length }}"
+
+    - name: Check if all nodes joined
+      ansible.builtin.fail:
+        msg: "Expected {{ expected_nodes }} nodes but found {{ total_nodes }} nodes"
+      when: total_nodes | int != expected_nodes | int
+
+    - name: Check nodes status
+      ansible.builtin.shell: kubectl get nodes --no-headers | awk '{print $2}'
+      register: nodes_status
+      changed_when: false
+
+    - name: Wait for all nodes to be Ready (max 30 minutes)
+      ansible.builtin.command: kubectl get nodes --no-headers
+      register: nodes_check
+      until: nodes_check.stdout_lines | select('search', 'NotReady') | list | length == 0
+      retries: 60
+      delay: 30
+      failed_when: false
+
+    - name: Check for pending nodes
+      ansible.builtin.set_fact:
+        pending_nodes: "{{ nodes_check.stdout_lines | select('search', 'NotReady') | list }}"
+
+    - name: Display pending nodes warning
+      ansible.builtin.debug:
+        msg: "WARNING: Some nodes are still NotReady. Please investigate: {{ pending_nodes }}"
+      when: pending_nodes | length > 0
+
+    - name: Fail if nodes not ready after 30 minutes
+      ansible.builtin.fail:
+        msg: "ALERT: Nodes failed to become Ready after 30 minutes: {{ pending_nodes }}"
+      when: pending_nodes | length > 0
+
+    - name: Display cluster status
+      ansible.builtin.command: kubectl get nodes
+      register: final_status
+      changed_when: false
+
+    - name: Show final cluster status
+      ansible.builtin.debug:
+        msg: "{{ final_status.stdout_lines }}"

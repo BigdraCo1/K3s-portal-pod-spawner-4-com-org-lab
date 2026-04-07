@@ -1,0 +1,93 @@
+---
+- name: Install UFW
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+  become: true
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+  become: true
+
+- name: Allow SSH
+  community.general.ufw:
+    rule: allow
+    port: '22'
+    proto: tcp
+  become: true
+
+- name: Allow etcd client communication
+  community.general.ufw:
+    rule: allow
+    port: '4001'
+    proto: "{{ item }}"
+  loop:
+    - tcp
+    - udp
+  become: true
+
+- name: Allow HTTP/HTTPS
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - '80'
+    - '443'
+    - '8080'
+  become: true
+
+- name: Allow Kubernetes API server
+  community.general.ufw:
+    rule: allow
+    port: '6443'
+    proto: tcp
+  become: true
+
+- name: Allow kubelet API
+  community.general.ufw:
+    rule: allow
+    port: '10250'
+    proto: tcp
+  become: true
+
+- name: Allow Flannel/VXLAN overlay network
+  community.general.ufw:
+    rule: allow
+    port: '8472'
+    proto: udp
+  become: true
+
+- name: Allow Grafana
+  community.general.ufw:
+    rule: allow
+    port: '3000'
+    proto: tcp
+  become: true
+
+- name: Allow Prometheus
+  community.general.ufw:
+    rule: allow
+    port: '9090'
+    proto: tcp
+  become: true
+
+- name: Allow Node Exporter
+  community.general.ufw:
+    rule: allow
+    port: '9100'
+    proto: tcp
+  become: true
+
+- name: Allow NodePort range (Grafana dashboard)
+  community.general.ufw:
+    rule: allow
+    port: '30000'
+    proto: tcp
+  become: true
+
+- name: Reload UFW
+  community.general.ufw:
+    state: reloaded
+  become: true

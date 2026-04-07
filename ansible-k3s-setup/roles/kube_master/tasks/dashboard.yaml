@@ -1,0 +1,100 @@
+---
+- name: Check if Helm is installed
+  ansible.builtin.command: which helm
+  register: helm_check
+  failed_when: false
+  changed_when: false
+
+- name: Fail if Helm is not installed
+  ansible.builtin.fail:
+    msg: "Helm is not installed. Please install Helm first."
+  when: helm_check.rc != 0
+
+- name: Add Prometheus Helm repository
+  ansible.builtin.command: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  register: helm_repo_prometheus
+  failed_when: false
+  changed_when: "'has been added' in helm_repo_prometheus.stdout"
+
+- name: Add Grafana Helm repository
+  ansible.builtin.command: helm repo add grafana https://grafana.github.io/helm-charts
+  register: helm_repo_grafana
+  failed_when: false
+  changed_when: "'has been added' in helm_repo_grafana.stdout"
+
+- name: Update Helm repositories
+  ansible.builtin.command: helm repo update
+  changed_when: true
+
+- name: Install kube-prometheus-stack
+  ansible.builtin.command: >
+    helm install monitoring prometheus-community/kube-prometheus-stack
+    --namespace monitoring
+    --create-namespace
+    --set kubeEtcd.enabled=false
+    --set kubeScheduler.enabled=false
+    --set kubeControllerManager.enabled=false
+    --set grafana.persistence.enabled=true
+    --set grafana.persistence.size=1Gi
+  args:
+    creates: /tmp/monitoring-installed.flag
+  register: helm_install
+
+- name: Create monitoring installed flag
+  ansible.builtin.file:
+    path: /tmp/monitoring-installed.flag
+    state: touch
+    mode: '0644'
+  when: helm_install.changed
+
+- name: Wait for Grafana deployment to be ready
+  ansible.builtin.command: >
+    kubectl wait --for=condition=available --timeout=300s
+    deployment/monitoring-grafana -n monitoring
+  changed_when: false
+
+- name: Reset Grafana admin password
+  ansible.builtin.command: >
+    kubectl exec -n monitoring deployment/monitoring-grafana --
+    grafana-cli admin reset-admin-password {{ grafana_admin_password | default('admin123') }}
+  register: password_reset
+  changed_when: "'Admin password changed successfully' in password_reset.stdout"
+  failed_when: false
+
+- name: Expose Grafana via NodePort
+  ansible.builtin.command: >
+    kubectl patch svc monitoring-grafana -n monitoring
+    -p '{"spec": {"type": "NodePort", "ports": [{"port": 80, "nodePort": 30000, "targetPort": 3000}]}}'
+  register: patch_result
+  changed_when: "'patched' in patch_result.stdout"
+  failed_when: false
+
+- name: Get Grafana NodePort
+  ansible.builtin.command: >
+    kubectl get svc monitoring-grafana -n monitoring
+    -o jsonpath='{.spec.ports[0].nodePort}'
+  register: grafana_nodeport
+  changed_when: false
+
+- name: Get Grafana pod node IP
+  ansible.builtin.shell: >
+    kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana
+    -o jsonpath='{.items[0].status.hostIP}'
+  register: grafana_node_ip
+  changed_when: false
+
+- name: Get Grafana pod name
+  ansible.builtin.shell: >
+    kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana
+    -o jsonpath='{.items[0].metadata.name}'
+  register: grafana_pod_name
+  changed_when: false
+
+- name: Display Grafana access information
+  ansible.builtin.debug:
+    msg: |
+      Grafana Pod: {{ grafana_pod_name.stdout }}
+      Running on Node IP: {{ grafana_node_ip.stdout }}
+      Dashboard URL: http://{{ grafana_node_ip.stdout }}:{{ grafana_nodeport.stdout }}
+      Username: admin
+      Password: {{ grafana_admin_password | default('admin123') }}

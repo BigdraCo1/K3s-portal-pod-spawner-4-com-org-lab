@@ -1,0 +1,24 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 1: First setup (only run once)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- name: Boring setup tasks
+  ansible.builtin.include_tasks: setup.yaml
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 2: Configure cgroups
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- name: Copy memgroup.py to home directory
+  ansible.builtin.copy:
+    src: memgroup.py
+    dest: "{{ ansible_env.HOME }}/memgroup.py"
+    mode: '0755'
+
+- name: Run memgroup.py script
+  ansible.builtin.command: python3 {{ ansible_env.HOME }}/memgroup.py
+  become: true
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 3: Set hostnames
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- name: Set hostnames for all nodes
+  ansible.builtin.include_tasks: hostnamectl.yaml

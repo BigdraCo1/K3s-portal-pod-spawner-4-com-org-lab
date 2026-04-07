@@ -1,0 +1,6 @@
+---
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 1: First setup (only run once)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- name: Setup K3s Worker Node
+  ansible.builtin.include_tasks: setup.yaml
